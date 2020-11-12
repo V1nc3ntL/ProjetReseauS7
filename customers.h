@@ -2,7 +2,7 @@
 
 #define DEBUG_ACCOUNTF "accountFile"
 #define DEBUG_CLIENTF "clientFile"
-#define BUFFER_SIZE 256
+
 // Un client à un Id, un password et des ids de compte
 
 typedef struct

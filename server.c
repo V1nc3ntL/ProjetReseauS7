@@ -76,7 +76,7 @@ int main(int argc, char const *argv[])
 	} 
 	
 	// On fixe le nombre maximum de connexion 
-	if (listen(server, NB_MAX_CO 10) < 0) 
+	if (listen(server, NB_MAX_CO ) < 0) 
 	{ 
 		perror("listen"); 
 		exit(EXIT_FAILURE); 

@@ -28,8 +28,10 @@ typedef struct{
     customer* c;
 }
 customerArray ;
+
 int liberateCustomer(customer cus);
 int liberateCustomerArray(customer * custs,int nbCustomers );
 int getClientsAndAccountFrom(const char* clientFilename,const char* accountFileName,
 						 customerArray * custs );
+void displayCustomerArray(customerArray * custs);
 #endif

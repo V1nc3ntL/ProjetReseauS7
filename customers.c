@@ -1,8 +1,28 @@
+/*	EL-KHARROUBI 	LEFEBVRE						              *
+ *	EISE4											                      *
+ *	Reseaux											                    *
+ *	TP4												                      *
+ *	customers.c : définitions du traitement des     *
+ *  clients                                         */
 #include "customers.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "bankingprotocol.h"
+
+void displayCustomerArray(customerArray * custs){
+ int j ;
+  for(int i = 0 ; i < custs->nbCustomers;i++){
+    printf(custs->c[i].id);
+    for(j = 0 ; j < custs->c[i].nbAccount;j++){
+      printf("\n\t");
+      printf(custs->c[i].accounts[j].accountId);
+      printf("\t = %d",custs->c[i].accounts[j].balance);
+    }
+    printf("\n");
+  }
+  fflush(stdout);
+}
 
 int
 liberateCustomerArray (customer * custs, int nbCustomers)
@@ -13,9 +33,9 @@ liberateCustomerArray (customer * custs, int nbCustomers)
       free (custs[i].id);
       free (custs[i].pw);
       for (j = 0; j < custs[i].nbAccount; j++)
-	{
-	  free (custs[i].accounts[j].accountId);
-	}
+	    {
+	      free (custs[i].accounts[j].accountId);
+	    }
       free (custs[i].accounts);
     }
   free (custs);
@@ -36,7 +56,7 @@ getAccountsFrom (FILE * fa, customerArray * custs)
   while (nChar >= 0)
     {
 
-      strtok_r (accountId, SEPARATOR, &tmp);
+      strtok_r (accountId, SEPARATORSTR, &tmp);
       for (i = 0; i < custs->nbCustomers; i++)
 	{
 
@@ -45,7 +65,7 @@ getAccountsFrom (FILE * fa, customerArray * custs)
 	    {
 
 	      custs->c[i].nbAccount++;
-	      strtok_r (tmp, SEPARATOR, &bal);
+	      strtok_r (tmp, SEPARATORSTR, &bal);
 
 	      //      printf(tmp);
 	      szToAlloc =
@@ -58,8 +78,9 @@ getAccountsFrom (FILE * fa, customerArray * custs)
 	      custs->c[i].accounts = copy;
 	      custs->c[i].accounts[custs->c[i].nbAccount - 1].accountId =
 		malloc (strlen (tmp) + 1);
-	      memmove (custs->c[i].accounts[custs->c[i].nbAccount - 1].
-		       accountId, tmp, strlen (tmp) + 1);
+	      memmove (custs->c[i].
+		       accounts[custs->c[i].nbAccount - 1].accountId, tmp,
+		       strlen (tmp) + 1);
 	      custs->c[i].accounts[custs->c[i].nbAccount - 1].balance =
 		atoi (bal);
 	    }
@@ -89,7 +110,7 @@ createCustDatabase (customerArray * custs, FILE * fc, char *id, char *pw)
   while (nCharC >= 0)
     {
 
-      strtok_r (id, SEPARATOR, &pw);
+      strtok_r (id, SEPARATORSTR, &pw);
       szToAlloc +=
 	sizeof (customer) + strlen (id) + 2 + strlen (pw) + sizeof (int);
       copy = NULL;
@@ -127,6 +148,12 @@ getClientsAndAccountFrom (const char *clientFilename,
       fprintf (stderr, "Fichier de clients manquants");
       return EXIT_FAILURE;
     }
+    if (!fa)
+    {
+      fprintf (stderr, "Fichier de comptes manquants");
+      return EXIT_FAILURE;
+    }
+
   szToAlloc = createCustDatabase (custs, fc, id, pw);
 
   getAccountsFrom (fa, custs);

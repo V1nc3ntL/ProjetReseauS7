@@ -15,7 +15,7 @@
 #include "server.h"
 #include "bankingprotocol.h"
 #include "customers.h"
-
+#include "accounts.h"
 #define PORT 8080
 //Mutex pour gestion des ressources
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -24,8 +24,49 @@ static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static customerArray custs;
 
 
-void treatCommand(char cmd){
+void treatCommand(char* trame){
+  int localId = 0 ,amount=0;
+  char cmd = *trame, opCode =  *trame & 0x07;
+  char* id, * pw,*tmp,*accountId;
 
+  printf ("Commande %s reçue\n",cmds[opCode]); 
+  strtok_r(trame,SEPARATORSTR,&id);
+  localId = authenticate(&custs,&id);
+
+   if(localId<0)
+    exit(EXIT_FAILURE);
+    
+  switch((char)opCode){
+    case ADD:
+      
+        strtok_r(id,SEPARATORSTR,&pw);
+        pthread_mutex_lock (&mutex);
+        addToAccount(&custs,localId,id, atoi(pw));
+        pthread_mutex_unlock (&mutex);
+        display(&custs);
+      
+      break;
+    case WITHDRAWAL:
+
+        strtok_r(id,SEPARATORSTR,&pw);
+        pthread_mutex_lock (&mutex);
+        removeFromAccount(&custs,localId,id, atoi(pw));
+        pthread_mutex_unlock (&mutex);
+        display(&custs);
+
+      //withdrawFromAccount(custs);
+      break;
+    case BALANCE:
+      //getBalance();
+      break;
+    case OPERATIONS:
+      //getOperations();
+      break;
+    case CONNECTION:
+    
+      break;   
+
+  }
 }
 
 void *
@@ -43,22 +84,25 @@ treatTCPConnexion (void *socket)
 		//Protection des ressources critiques
       pthread_mutex_lock (&mutex);
       recv (*(int *) socket, buffer, BUFFER_SIZE, 0);
-      send (*(int *) socket, buffer, strlen (buffer), 0);
-	    
-		  printf ("%s reçu\n",buffer);
-      // On enlève le bit de vérification client de la trame
-      *buffer &= ~OK;
-	    
-      //strtok_r(buffer,SEPARATORSTR,&tmp);
-      printf ("Commande %s reçue\n",cmds[*buffer& 0x7]);
-	  printf("   tmp : %s\n",tmp);
-	  fflush (stdout);
-	pthread_mutex_unlock (&mutex);
-	  treatCommand(*buffer&~OK);
-      
+      pthread_mutex_unlock (&mutex);
 	
+
+      if(*buffer&KO){
+        fprintf(stderr,"\nTrame non conforme reçue");
+      }
+      else{
+
+      
+	    fflush (stdout);
+      printf ("%s reçu\n",buffer);
+      //On traite sans le Header
+      treatCommand(buffer);
+
+      pthread_mutex_lock (&mutex);
+      send (*(int *) socket, buffer, strlen (buffer), 0);
+	    pthread_mutex_unlock (&mutex);  
     
-      break;
+      }
     }
 
 }
@@ -146,7 +190,7 @@ main (int argc, char const *argv[])
   else
     getClientsAndAccountFrom (DEBUG_CLIENTF, DEBUG_ACCOUNTF, &custs);
 
-	displayCustomerArray(&custs);
+	display(&custs);
   printf ("Launching banking server on port %d\n", port);
   
   fflush (stdout);

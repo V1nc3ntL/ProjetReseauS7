@@ -10,7 +10,41 @@
 #include <string.h>
 #include "bankingprotocol.h"
 
-void displayCustomerArray(customerArray * custs){
+// retourne un indice de client, 0 si l'authentification n'a pas réussi
+int authenticate(customerArray * custs,char** trame){
+  int i;
+  char* pw=NULL,*id =NULL,*rest=NULL;
+  
+ // strtok_r(trame,SEPARATORSTR,&pw);
+
+  strtok_r(*trame,SEPARATORSTR,&pw);
+  strtok_r(pw,SEPARATORSTR,&rest);
+
+  fflush(stdout);
+
+  for(i = 0 ; i < custs->nbCustomers;i++){
+    if(!strcmp(custs->c[i].id,*trame))
+      break;
+  }
+
+  if(i == custs->nbCustomers){
+    fprintf(stderr,"\nImpossible de trouver le client");
+    i = -1 ;
+  }else{
+    pw[sizeof(pw)] = '\n';
+
+    if(strncmp(pw,custs->c[i].pw,strlen(custs->c[i].pw))){
+      fprintf(stderr,"\nMauvais mot de passe");
+      i = -1;
+    }else{
+      fprintf(stdout,"\n%s Identifié ",custs->c[i].id);
+     *trame=rest;
+    }
+  
+  }
+  return i;
+}
+void display(customerArray * custs){
  int j ;
   for(int i = 0 ; i < custs->nbCustomers;i++){
     printf(custs->c[i].id);
@@ -73,7 +107,7 @@ getAccountsFrom (FILE * fa, customerArray * custs)
 		sizeof (int);
 	      copy = NULL;
 	      while (!copy)
-		copy = realloc (custs->c[i].accounts, szToAlloc);
+	      	copy = realloc (custs->c[i].accounts, szToAlloc);
 
 	      custs->c[i].accounts = copy;
 	      custs->c[i].accounts[custs->c[i].nbAccount - 1].accountId =
@@ -122,7 +156,7 @@ createCustDatabase (customerArray * custs, FILE * fc, char *id, char *pw)
       custs->c[i].id = malloc (strlen (id) + 1);
       custs->c[i].pw = malloc (strlen (pw) + 1);
       memmove (custs->c[i].id, id, (size_t) strlen (id) + 1);
-      memmove (custs->c[i].pw, pw, (size_t) strlen (pw) + 1);
+      memmove (custs->c[i].pw, pw, (size_t) strlen (pw) );
       custs->c[i].nbAccount = 0;
       custs->c[i].accounts = NULL;
       nCharC = getline (&id, &bufS, fc);

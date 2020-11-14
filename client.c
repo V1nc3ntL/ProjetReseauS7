@@ -13,6 +13,7 @@
 #include "client.h"
 #define PORT 8080
 
+#define CMD_BUFFER_SIZE 25
 
 int
 getOperationCode (char *argCmd)
@@ -47,7 +48,7 @@ char * allocateTrame(int nbArg,char*args[],char trameHeader){
   
   szToAlloc= 2;
   
-  for(i = 1; i < nbArg+1 ;i++){
+  for(i = 1; i < nbArg ;i++){
 
     memmove(toSend+szToAlloc,args[i],strlen(args[i]));
     szToAlloc += strlen(args[i])+1;
@@ -70,8 +71,12 @@ main (int argc, char const *argv[])
   char rxBuf[BUFFER_SIZE], buffer[BUFFER_SIZE] = { 0 };
   char *cmd = NULL;
   //Les commandes sont créées avec 4 arguments max
-  char arg1[50], arg2[50], arg3[50], arg4[50];
-  char* args[4] = {arg1,arg2,arg3,arg4};
+  char  arg1[CMD_BUFFER_SIZE], 
+        arg2[CMD_BUFFER_SIZE], 
+        arg3[CMD_BUFFER_SIZE], 
+        arg4[CMD_BUFFER_SIZE],
+        arg5[CMD_BUFFER_SIZE];
+  char* args[5] = {arg1,arg2,arg3,arg4,arg5};
   char trameHeader = 0, nbArg = 0;
   char *toSend = NULL;
 
@@ -107,13 +112,15 @@ main (int argc, char const *argv[])
       printf ("%s\n", buffer);
       bzero (buffer, BUFFER_SIZE);
       fgets (buffer, BUFFER_SIZE, stdin);
-      nbArg = sscanf (buffer, "%s %s %s %s", arg1, arg2, arg3, arg4);
+      nbArg = sscanf (buffer, "%s %s %s %s %s", arg1, arg2, arg4, arg3,arg5);
+      
+      if(nbArg < 2)
+        trameHeader |= KO;
       trameHeader = getOperationCode (arg1);
-      printf ("Trame header : %d\n", trameHeader);
+
       if (trameHeader & KO)
 	{
-	  printf ("\nCommande non reconnue\n");
-	  fflush (stdout);
+	  fprintf (stderr,"\nCommande non reconnue\n");
 	}
       else
 	{

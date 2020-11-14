@@ -9,6 +9,7 @@ OBJ_TEST = $(filter-out main.o, $(OBJ)) $(TST:.c=.o)
 EXECS="server client" 
 
 
+
 all: server client 
 
 clean: 
@@ -17,6 +18,6 @@ clean:
 client: client.c
 	$(CC) $(LIBFLAGS) $^ -o $@  
 
-server: server.c customers.c
+server: server.c customers.c accounts.c
 	$(CC) $(LIBFLAGS) $^ -o $@  
 	

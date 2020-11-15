@@ -14,7 +14,7 @@
 #define PORT 8080
 
 #define CMD_BUFFER_SIZE 25
-
+// Retourne le code opération du header
 int
 getOperationCode (char *argCmd)
 {
@@ -32,6 +32,7 @@ getOperationCode (char *argCmd)
 
   return toReturn;
 }
+//Retourne un char* avec la chaîne à envoyer
 char * allocateTrame(int nbArg,char*args[],char trameHeader){
   int i = 0;
   char* toSend = NULL;
@@ -55,8 +56,6 @@ char * allocateTrame(int nbArg,char*args[],char trameHeader){
     toSend[szToAlloc-1] = SEPARATOR;
     
   }
-
-  
   return toSend;
 }
 
@@ -65,10 +64,9 @@ char * allocateTrame(int nbArg,char*args[],char trameHeader){
 int
 main (int argc, char const *argv[])
 {
-  int sock = 0, valread;
+  int sock = 0;
   struct sockaddr_in serv_addr;
-  char *hello = "Hello from client";
-  char rxBuf[BUFFER_SIZE], buffer[BUFFER_SIZE] = { 0 };
+  char rxBuf[BUFFER_SIZE] = {0};
   char *cmd = NULL;
   //Les commandes sont créées avec 4 arguments max
   char  arg1[CMD_BUFFER_SIZE], 
@@ -83,7 +81,7 @@ main (int argc, char const *argv[])
 
   if ((sock = socket (AF_INET, SOCK_STREAM, 0)) < 0)
     {
-      printf ("\nProbl\203me \n");
+      fprintf (stderr,"Impossible d'ouvrir le socket");
       return -1;
     }
 
@@ -103,21 +101,20 @@ main (int argc, char const *argv[])
   if (connect (sock, (struct sockaddr *) &serv_addr, sizeof (serv_addr)) < 0)
     {
       printf ("\nConnection Failed \n");
-      return -1;
+      return EXIT_FAILURE;
     }
 
-  while (1)
-    {
-      read (sock, buffer, BUFFER_SIZE);
-      printf ("%s\n", buffer);
-      bzero (buffer, BUFFER_SIZE);
-      fgets (buffer, BUFFER_SIZE, stdin);
-      nbArg = sscanf (buffer, "%s %s %s %s %s", arg1, arg2, arg4, arg3,arg5);
+  // while (1)
+  //   {
+      recv (sock, rxBuf, BUFFER_SIZE,0);
+      printf ("%s\n", rxBuf);
+      bzero (rxBuf, BUFFER_SIZE);
+      fgets (rxBuf, BUFFER_SIZE, stdin);
+      nbArg = sscanf (rxBuf, "%s %s %s %s %s", arg1, arg2, arg3, arg4,arg5);
       
-      if(nbArg < 2)
+     trameHeader = getOperationCode (arg1);
+     if(nbArg < 2)
         trameHeader |= KO;
-      trameHeader = getOperationCode (arg1);
-
       if (trameHeader & KO)
 	{
 	  fprintf (stderr,"\nCommande non reconnue\n");
@@ -125,23 +122,20 @@ main (int argc, char const *argv[])
       else
 	{
     trameHeader |= OK;
-    printf ("Trame header : %d\n",trameHeader);
-
-	  fflush (stdout);	
 	
-      toSend = allocateTrame(nbArg,args,trameHeader);
+    toSend = allocateTrame(nbArg,args,trameHeader);
 
-      printf ("\nCommande %s envoyée\n", cmds[toSend[0] & 0x7]);
+    printf ("\nCommande %s envoyée\n", cmds[toSend[0] & 0x7]);
       
-      send (sock, toSend, strlen (toSend) , 0);
-      printf("\nRentrez une nouvelle commande :\n");
-      fflush (stdout);
-      bzero(buffer,BUFFER_SIZE);
-      free (toSend);
-	    
+    send (sock, toSend, strlen (toSend) , 0);
+    //
+    fflush (stdout);
+    bzero(rxBuf,BUFFER_SIZE);
+    free (toSend);
 	}
-    }
+  printf("\nRentrez une nouvelle commande :\n");
+    // }
 
 
-  return 0;
+  return 1;
 }

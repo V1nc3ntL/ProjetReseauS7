@@ -6,12 +6,11 @@
  *  manipulation des clients                        */
 #ifndef __CUSTOMERS__
 #include "businesslogictypes.h"
-#define DEBUG_ACCOUNTF "accountFile"
-#define DEBUG_CLIENTF "clientFile"
 
 
 
-int authenticate(customerArray * custs,char** trame);
+int getAccountIndex(customerArray * custs, int localId,char * pw);
+int authenticate(customerArray * custs,char* id,char* pw);
 int liberateCustomer(customer cus);
 int liberateCustomerArray(customer * custs,int nbCustomers );
 int getClientsAndAccountFrom(const char* clientFilename,const char* accountFileName,

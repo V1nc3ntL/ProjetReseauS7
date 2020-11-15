@@ -40,21 +40,19 @@ int findAccountIndex(customerArray * custs,int customerIndex,char* accountId){
 }
 
 //Ajoute une somme sur le compte id
-int addToAccount(customerArray * custs,int customerIndex,char* accountId,signed int amount ){
-    int i = findAccountIndex(custs,customerIndex,accountId);
-    if(i >= 0)
-        custs->c[customerIndex].accounts[i].balance += amount;
-    
-    return i;
+int addToAccount(customerArray * custs,int customerIndex,int accountIndex,signed int amount ){
+        custs->c[customerIndex].accounts[accountIndex].balance += amount;
+
+
+    return EXIT_FAILURE;
 }
 
 
 
 //Ajoute une somme sur le compte id
-int removeFromAccount(customerArray * custs,int customerIndex,char* accountId,signed int amount ){
-    int i = findAccountIndex(custs,customerIndex,accountId);
-    if(i >= 0)
-         custs->c[customerIndex].accounts[i].balance -= amount;
+int removeFromAccount(customerArray * custs,int customerIndex,int accountIndex,signed int amount ){
+         custs->c[customerIndex].accounts[accountIndex].balance -= amount;
+            //custs->c[customerIndex].accounts[accountIndex].accounts.
 
-    return i;
+    return EXIT_SUCCESS;
 }

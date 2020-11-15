@@ -10,42 +10,49 @@
 #include <string.h>
 #include "bankingprotocol.h"
 
+
+int getAccountIndex(customerArray * custs,int customerIndex,char* accountId){
+  int i ;
+
+    for(i=0;i<custs->c[customerIndex].nbAccount;i++){
+        if(!strncmp(accountId,custs->c[customerIndex].accounts[i].accountId,strlen(accountId)))
+            break;
+}
+    if(i == custs->c[customerIndex].nbAccount){
+        fprintf(stderr,"\nAucun compte ne correspond\n");
+        i=-1;
+    }
+    return i;
+}
 // retourne un indice de client, 0 si l'authentification n'a pas réussi
-int authenticate(customerArray * custs,char** trame){
+int authenticate(customerArray * custs,char* id,char* pw){
   int i;
-  char* pw=NULL,*id =NULL,*rest=NULL;
-  
- // strtok_r(trame,SEPARATORSTR,&pw);
-
-  strtok_r(*trame,SEPARATORSTR,&pw);
-  strtok_r(pw,SEPARATORSTR,&rest);
-
-  fflush(stdout);
 
   for(i = 0 ; i < custs->nbCustomers;i++){
-    if(!strcmp(custs->c[i].id,*trame))
+    if(!strcmp(custs->c[i].id,id)){
       break;
+    }
   }
+  
+  
 
   if(i == custs->nbCustomers){
     fprintf(stderr,"\nImpossible de trouver le client");
     i = -1 ;
   }else{
-    pw[sizeof(pw)] = '\n';
+    // Les password sont identifiés par un linefeed
 
-    if(strncmp(pw,custs->c[i].pw,strlen(custs->c[i].pw))){
+    if(strncmp(pw,custs->c[i].pw,strlen(pw))){
       fprintf(stderr,"\nMauvais mot de passe");
       i = -1;
-    }else{
-      fprintf(stdout,"\n%s Identifié ",custs->c[i].id);
-     *trame=rest;
     }
-  
   }
+
   return i;
 }
 void display(customerArray * custs){
  int j ;
+     printf("\n");
   for(int i = 0 ; i < custs->nbCustomers;i++){
     printf(custs->c[i].id);
     for(j = 0 ; j < custs->c[i].nbAccount;j++){
@@ -100,23 +107,28 @@ getAccountsFrom (FILE * fa, customerArray * custs)
 
 	      custs->c[i].nbAccount++;
 	      strtok_r (tmp, SEPARATORSTR, &bal);
-
-	      //      printf(tmp);
+        
 	      szToAlloc =
 		sizeof (custs->c[i].accounts) + sizeof (account) +
 		sizeof (int);
+    // On réaloue la taille pour avoir un bloc mémoire
+    // contigü afin d'utiliser comme un tableau
 	      copy = NULL;
 	      while (!copy)
 	      	copy = realloc (custs->c[i].accounts, szToAlloc);
-
+        
+     
 	      custs->c[i].accounts = copy;
 	      custs->c[i].accounts[custs->c[i].nbAccount - 1].accountId =
 		malloc (strlen (tmp) + 1);
+    // On copie
 	      memmove (custs->c[i].
 		       accounts[custs->c[i].nbAccount - 1].accountId, tmp,
 		       strlen (tmp) + 1);
 	      custs->c[i].accounts[custs->c[i].nbAccount - 1].balance =
 		atoi (bal);
+    // On initialise le pointeur d'opérations
+    // custs->c[i].accounts[custs->c[i].nbAccount - 1].ops = NULL;
 	    }
 	}
       nChar = getline (&accountId, &bufS, fa);

@@ -9,14 +9,16 @@
 typedef struct
 {
     signed int amount;
-    char* date;
-} operations;
+    char type;
+    char *date;
+} operation;
 
 typedef struct
 {
    char* accountId;
    signed int balance;
-   operations* ops;
+   int nbOps;
+   operation* ops;
 }  account;
 // Un client à un Id, un password et des ids de compte
 typedef struct

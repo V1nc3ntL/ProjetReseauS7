@@ -13,11 +13,18 @@
 
 int getAccountIndex(customerArray * custs,int customerIndex,char* accountId){
   int i ;
+    printf("\nAUTHENTICATE");
+    printf("\n%s\n",accountId);
 
     for(i=0;i<custs->c[customerIndex].nbAccount;i++){
-        if(!strncmp(accountId,custs->c[customerIndex].accounts[i].accountId,strlen(accountId)))
+        if(!strncmp(accountId,custs->c[customerIndex].accounts[i].accountId,strlen(accountId)-1)){
+          printf(custs->c[customerIndex].accounts[i].accountId);
+          printf("\n%s\n",accountId);
+        
             break;
+        }
 }
+
     if(i == custs->c[customerIndex].nbAccount){
         fprintf(stderr,"\nAucun compte ne correspond\n");
         i=-1;
@@ -28,14 +35,13 @@ int getAccountIndex(customerArray * custs,int customerIndex,char* accountId){
 int authenticate(customerArray * custs,char* id,char* pw){
   int i;
 
+
+
   for(i = 0 ; i < custs->nbCustomers;i++){
-    if(!strcmp(custs->c[i].id,id)){
+    if(!strcmp(custs->c[i].id,id))
       break;
-    }
   }
   
-  
-
   if(i == custs->nbCustomers){
     fprintf(stderr,"\nImpossible de trouver le client");
     i = -1 ;
@@ -47,7 +53,7 @@ int authenticate(customerArray * custs,char* id,char* pw){
       i = -1;
     }
   }
-
+  printf("%d",i);
   return i;
 }
 void display(customerArray * custs){

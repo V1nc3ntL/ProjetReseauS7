@@ -17,17 +17,19 @@
 #include "customers.h"
 #include "accounts.h"
 #define PORT 8080
+
 //Mutex pour gestion des ressources
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Chaîne du client
-static const char welcomeMsg[] = WELCOME_CLIENT_MESSAGE;
+static const char welcomeMsg[] =" "; //WELCOME_CLIENT_MESSAGE;
 
 //Fichiers de clients et de comptes
 
 static char* clientFileName = DEBUG_CLIENTF;
 static char* accountFileName = DEBUG_ACCOUNTF;
 
+// Données utilisateurs
 static customerArray custs;
 /*
 int updateClientFile(customerArray* custs,char* clientF){
@@ -92,56 +94,56 @@ void cutTrame(char** trame, char** id, char** accountId,char** pw,char**tmp){
 // Traitement des commandes
 // Retourne la trame a envoyer
 char* treatCommand(char* trame){
-  int localId = 0 ,amount=0, lAccountId = 0;
-  char cmd = *trame, 
+  signed int amount ;
+  int localId = 0 , lAccountId = -1;
   // Le code d'opération est sur les 4 premiers octets
+  char* id = NULL,cmd = *trame, * pw=NULL,*tmp=NULL,*accountId=NULL, * ok = malloc(OK),
   opCode =  *trame & 0x07;
 
-  char* id, * pw,*tmp,*accountId;
-
-  char * ok = malloc(OK);
-  /*
   printf ("Commande %s reçue\n",cmds[opCode]); 
- */
+ 
   //Récupération de la trame
   cutTrame(&trame,&id,&accountId,&pw,&tmp);
- /*
+ 
     printf("\n Id = %s",id);
    printf("\n pw = %s",pw);
 
-   printf("\n pw = %s",tmp);*/
+   printf("\n amount= %s",tmp);
   localId = authenticate(&custs,id,pw);
 
   if( localId<0)
-    exit(EXIT_FAILURE);
+    *ok=KO; 
+  else{
+    printf(accountId);
 
-  printf("\n\t\tLOCAL ID : %d\n\t\t%s",localId,custs.c[localId].id);
+ lAccountId = getAccountIndex(&custs,localId,accountId);
   
-  lAccountId = getAccountIndex(&custs,localId,accountId);
-  printf("\n\t\t%s",custs.c[localId].accounts[lAccountId].accountId);
-  printf("\nlAccountId =  %d",lAccountId);
-    
-  switch((char)opCode){
-    case ADD:
-         if(atoi(tmp) <= 0 ){
-          fprintf(stderr,"Le chiffre doit être positif");
+  if(lAccountId <0){
 
+  }else{
+    switch((char)opCode){
+      case ADD:
+        amount = atoi(tmp);
+         if(amount<= 0 ){
+          fprintf(stderr,"Le chiffre doit être positif");
         }
         else{
-       
-          pthread_mutex_lock (&mutex);
-          addToAccount(&custs,localId,lAccountId, atoi(tmp));
-          pthread_mutex_unlock (&mutex);
+          
+          printf("\n%d %d %d",localId,lAccountId,amount);
+          addToAccount(&custs,localId,lAccountId,amount);
           display(&custs);
+          addOperation(&(custs.c[localId].accounts[lAccountId]),ADD,amount);
         }
+        
+         
       break;
     case WITHDRAWAL:
-        if(atoi(tmp) <= 0 ){
+        if(amount <= 0 ){
           fprintf(stderr,"Le chiffre doit être positif");
         }
-        pthread_mutex_lock (&mutex);
+  
         removeFromAccount(&custs,localId,lAccountId, abs(atoi(tmp)));
-        pthread_mutex_unlock (&mutex);
+        addOperation(&custs.c[localId].accounts[lAccountId],WITHDRAWAL,amount);
         display(&custs);
 
       //withdrawFromAccount(custs);
@@ -157,6 +159,10 @@ char* treatCommand(char* trame){
       break;   
 
   }
+  }
+  
+  }
+
   return ok;
 
 }
@@ -164,7 +170,7 @@ char* treatCommand(char* trame){
 void * 
 treatTCPConnexion (void *socket)
 {
-  char * tmp , *bufferTx,opCode = KO;
+  char * tmp =NULL, *bufferTx = NULL,opCode = KO;
   char bufferRx[BUFFER_SIZE] = { 0 };
 
   //Envoie un message de bienvenue
@@ -182,7 +188,7 @@ treatTCPConnexion (void *socket)
     fprintf(stderr,"\nTrame non conforme reçue");
   }
   else{
-    printf ("%s reçu\n",bufferRx);
+    //printf ("%s reçu\n",bufferRx);
     //On traite sans le Header
     
     bufferTx = treatCommand(bufferRx);
@@ -192,19 +198,19 @@ treatTCPConnexion (void *socket)
     pthread_mutex_unlock (&mutex);  
   }
     
-
+  printf("\n");
 
 }
 
-// Permet d'effectuer des actions de libération
-// mémoire lors de ctrl c
+// Permet d'intercepter l'arrêt
 void
 TCPIntHandler (int dummy)
 {
 	printf("\nArrêt du serveur TCP\n");
 	fflush(stdout);
-	liberateCustomerArray (custs.c, custs.nbCustomers);
+  liberateCustomerArray(custs.c,custs.nbCustomers);
   exit(EXIT_FAILURE);
+
 
 }
 //Fonction pour thread TCP

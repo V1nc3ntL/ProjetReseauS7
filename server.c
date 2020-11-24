@@ -14,192 +14,189 @@
 
 #include "server.h"
 #include "bankingprotocol.h"
-#include "customers.h"
-#include "accounts.h"
+#include "./businessLogic/customers.h"
+#include "./businessLogic/accounts.h"
 #define PORT 8080
 
 //Mutex pour gestion des ressources
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Chaîne du client
-static const char welcomeMsg[] =" "; //WELCOME_CLIENT_MESSAGE;
+static const char welcomeMsg[] =WELCOME_CLIENT_MESSAGE;
 
 //Fichiers de clients et de comptes
 
 static char* clientFileName = DEBUG_CLIENTF;
 static char* accountFileName = DEBUG_ACCOUNTF;
-
+static char* operationFileName = DEBUG_OPERATIONF;
 // Données utilisateurs
 static customerArray custs;
-/*
-int updateClientFile(customerArray* custs,char* clientF){
-  FILE * cF = fopen(clientF,"w");
-  int ret;
-  char* tmp; 
-  if(!cF){
-    fprintf(stderr,"Impossible d'ouvrir le fichier client %s",clientF);
-    ret = EXIT_FAILURE;
-    
-  }
-  else{
-    for(i=)
-    getline()
-    fclose(cF);
-  }
 
 
-  return ret;
-}*/
-int updateAccountFile(customerArray* custs,char* accountF){
-  FILE * aF = fopen(accountF,"w");
-  int ret , i , j;
-  char tmp[BUFFER_SIZE]; 
-  
-  if(!aF){
-    fprintf(stderr,"Impossible d'ouvrir le fichier compte %s",accountF);
-    ret = EXIT_FAILURE;
-    
-  }
-  else{
-    for(i = 0; i < custs->nbCustomers ; i++){
-      for(j = 0 ; j < custs->c[i].nbAccount;j++){
-        fputs( custs->c[i].id,aF);
-        fputc(SEPARATOR,aF);
-        fputs( custs->c[i].accounts[j].accountId ,aF);
-        fputc(SEPARATOR,aF);
-        sprintf(tmp,"%d",custs->c[i].accounts[j].balance);
-        fputs( tmp,aF);
-        bzero(tmp,BUFFER_SIZE);
-        fputc('\n',aF);
-      }
-        
-
-    }
-    fclose(aF);
-  }
-
-
-  return ret;
-}
 // Découpe la trame reçue
 // tous les pointeurs doivent être NULL
-void cutTrame(char** trame, char** id, char** accountId,char** pw,char**tmp){
-  strtok_r(*trame,SEPARATORSTR,id);
+void cutTrame(char* trame, char** id, char** accountId,char** pw,char**tmp,
+int * amount){
+  char mask ;
+  char* empty;
+  strtok_r(trame,SEPARATORSTR,id);
   strtok_r(*id,SEPARATORSTR,accountId);
   strtok_r(*accountId,SEPARATORSTR,pw);
   strtok_r(*pw,SEPARATORSTR,tmp);
-  //strtok_r()
+  
+  strtok_r(*tmp,SEPARATORSTR,&empty);
+
+  *amount = 0 ;
+
+  for(int i = 0 ; i < sizeof(int) ; i ++)
+      *amount |= (((unsigned char) (tmp[0][i]) )<< i*8);
+
 }
 
 // Traitement des commandes
 // Retourne la trame a envoyer
 char* treatCommand(char* trame){
-  signed int amount ;
-  int localId = 0 , lAccountId = -1;
+
+  unsigned int amount  = 0;
+  int localId = 0 , lAccountId = -1,nbOp = 0;
   // Le code d'opération est sur les 4 premiers octets
-  char* id = NULL,cmd = *trame, * pw=NULL,*tmp=NULL,*accountId=NULL, * ok = malloc(OK),
-  opCode =  *trame & 0x07;
-
-  printf ("Commande %s reçue\n",cmds[opCode]); 
+  char* id = NULL,cmd = *trame, * pw=NULL,*tmp=NULL,*accountId=NULL,   
+  // initialisation de la trame retour
+  * toSend = NULL ,  
+  opCode =  OP_CODE(trame); 
  
+  toSend = malloc(2);
+  
+  *toSend=KO; 
+  *(toSend+1)=0;
+  
+
   //Récupération de la trame
-  cutTrame(&trame,&id,&accountId,&pw,&tmp);
- 
-    printf("\n Id = %s",id);
-   printf("\n pw = %s",pw);
-
-   printf("\n amount= %s",tmp);
+  cutTrame(trame,&id,&accountId,&pw,&tmp,&amount);
+  
+  
+  //Authentification du client
   localId = authenticate(&custs,id,pw);
 
-  if( localId<0)
-    *ok=KO; 
-  else{
-    printf(accountId);
+  if( localId>=0){
 
- lAccountId = getAccountIndex(&custs,localId,accountId);
-  
-  if(lAccountId <0){
+    lAccountId = getAccountIndex(&custs,localId,accountId);
+ 
+  if(lAccountId >= 0){
 
-  }else{
-    switch((char)opCode){
-      case ADD:
-        amount = atoi(tmp);
-         if(amount<= 0 ){
-          fprintf(stderr,"Le chiffre doit être positif");
-        }
-        else{
-          
-          printf("\n%d %d %d",localId,lAccountId,amount);
-          addToAccount(&custs,localId,lAccountId,amount);
-          display(&custs);
-          addOperation(&(custs.c[localId].accounts[lAccountId]),ADD,amount);
-        }
-        
-         
+  fprintf (stdout,"\nCommande %s par %s sur %s" ,cmds[*trame],id,accountId); 
+
+    *toSend = (char)OK;
+     
+    switch(opCode){
+     
+      case BALANCE:
+        *toSend |= BALANCE;
+        break;
       break;
-    case WITHDRAWAL:
+
+       case WITHDRAWAL:
         if(amount <= 0 ){
           fprintf(stderr,"Le chiffre doit être positif");
+           *toSend |= (char)KO;
+           break;
         }
-  
-        removeFromAccount(&custs,localId,lAccountId, abs(atoi(tmp)));
+
+        pthread_mutex_lock(&mutex);
+        custs.c[localId].accounts[lAccountId].balance -= amount;
         addOperation(&custs.c[localId].accounts[lAccountId],WITHDRAWAL,amount);
-        display(&custs);
-
-      //withdrawFromAccount(custs);
-      break;
-    case BALANCE:
-      //getBalance();
-      break;
+        pthread_mutex_unlock(&mutex);
+ 
+        *toSend |= WITHDRAWAL;
+        break;
     case OPERATIONS:
-      //getOperations();
-      break;
-    case CONNECTION:
-    
-      break;   
+    case RES_OPERATION:
 
-  }
-  }
+      getLastOperations(operationFileName,id,accountId,&toSend);     
+      *toSend |= RES_OPERATION  ;
+      
+       fflush(stdout);
+      break;
+
+ 
+
+     case ADD:      
+
+         if(amount<= 0 ){
+          fprintf(stderr,"Le chiffre doit être positif");
+          *toSend |= (char)KO;
+          break;
+        }
+          pthread_mutex_lock(&mutex);
+          custs.c[localId].accounts[lAccountId].balance += amount;
+          addOperation(&(custs.c[localId].accounts[lAccountId]),ADD,amount);
+          pthread_mutex_unlock(&mutex);
+       * toSend |= ADD;
+         
+      break;
+          default:
+      break; 
   
   }
-
-  return ok;
-
+    updateOperationFile(&custs,operationFileName);
+  }  
+  }
+//    printf(cmds[*toSend]);
+  return toSend;
 }
 
 void * 
-treatTCPConnexion (void *socket)
+treatTCPConnection (void *socket)
 {
-  char * tmp =NULL, *bufferTx = NULL,opCode = KO;
-  char bufferRx[BUFFER_SIZE] = { 0 };
+  char * tmp =NULL, opCode = KO,tmpChar = 0;
+  char bufferTx[BUFFER_SIZE] = {0};
+  char bufferRx[BUFFER_SIZE] = {0};
 
-  //Envoie un message de bienvenue
+ int j = 0;
   pthread_mutex_lock (&mutex);
-  send (*(int *) socket, welcomeMsg, sizeof (welcomeMsg), 0);
-  pthread_mutex_unlock (&mutex);
-
-  
-  //Protection des ressources critiques
-  pthread_mutex_lock (&mutex);
+   //Envoie un message de bienvenue
+  send (*(int *) socket, welcomeMsg, sizeof (welcomeMsg), MSG_NOSIGNAL);
   recv (*(int *) socket, bufferRx, BUFFER_SIZE, 0);
+  
   pthread_mutex_unlock (&mutex);
-
+  
   if(*bufferRx&KO){
     fprintf(stderr,"\nTrame non conforme reçue");
   }
   else{
-    //printf ("%s reçu\n",bufferRx);
-    //On traite sans le Header
-    
-    bufferTx = treatCommand(bufferRx);
-    pthread_mutex_lock (&mutex);
-    updateAccountFile(&custs,accountFileName);
-    send (*(int *) socket, bufferTx, strlen (bufferTx), 0);
-    pthread_mutex_unlock (&mutex);  
-  }
-    
-  printf("\n");
+    //On remet à 0
+    bzero(bufferTx,  BUFFER_SIZE);
 
+    tmp = treatCommand(bufferRx);
+
+    if(*tmp != (RES_OPERATION |OK) )
+      strcpy(bufferTx,tmp);
+    else{
+      memmove(bufferTx,tmp,NB_OPERATIONS*(RET_RES_OP_SZ+2) );
+      bufferTx[0] = RES_OPERATION | OK;   
+    }
+
+    if(*bufferTx & KO){
+      fprintf(stderr,"\nErreur dans la création de la trame");
+      send (*(int *) socket, bufferTx, BUFFER_SIZE, MSG_NOSIGNAL);
+      bzero(bufferTx,BUFFER_SIZE);
+      pthread_mutex_unlock (&mutex);  
+    }
+    else{
+      pthread_mutex_lock (&mutex);
+      updateAccountFile(&custs,accountFileName);
+      if(*tmp & RES_OPERATION)
+       send (*(int *) socket, bufferTx,NB_OPERATIONS*RET_RES_OP_SZ+NB_OPERATIONS, MSG_NOSIGNAL);
+      else
+        send (*(int *) socket, bufferTx, BUFFER_SIZE, MSG_NOSIGNAL);
+      
+      pthread_mutex_unlock (&mutex);  
+      bzero(bufferTx,BUFFER_SIZE);
+    }
+
+  free(tmp);
+  }
+  printf("\n");
 }
 
 // Permet d'intercepter l'arrêt
@@ -210,8 +207,6 @@ TCPIntHandler (int dummy)
 	fflush(stdout);
   liberateCustomerArray(custs.c,custs.nbCustomers);
   exit(EXIT_FAILURE);
-
-
 }
 //Fonction pour thread TCP
 void *
@@ -224,7 +219,7 @@ launchTCPServer (void *server)
   pthread_t thread_id[BUFFER_SIZE];
   struct sockaddr_in address;
 
-  int i = 0, j = 0, opt = 1, addrlen = sizeof (address), clientSock;
+  int i = 0, j = 0, opt = 1, addrlen = sizeof (address), clientSock = 0;
 
   //association du ctrl-c à la libération de mémoire
   signal (SIGINT, TCPIntHandler);
@@ -261,20 +256,24 @@ launchTCPServer (void *server)
       perror ("listen");
       exit (EXIT_FAILURE);
     }
-  while (clientSock = accept (*(int *) server, (struct sockaddr *) &address,
+  
+  while (1)
+  {
+  
+    if(clientSock = accept (*(int *) server, (struct sockaddr *) &address,
 			      (socklen_t *) & addrlen))
     {
       if (pthread_create
-	  (&thread_id[i++], NULL, treatTCPConnexion,
-	   (void *) &clientSock) < 0)
-	exit (EXIT_FAILURE);
-
+	  (&thread_id[i++], NULL, treatTCPConnection,
+	   (void *) &clientSock) < 0){
+      exit (EXIT_FAILURE);
+     }	   
     }
-  for (j = 0; j < i; j++)
+    for (j = 0; j < i; j++)
     {
       pthread_join (thread_id[j], NULL);
     }
-
+  }
 }
 
 int
@@ -287,12 +286,11 @@ main (int argc, char const *argv[])
 
   getClientsAndAccountFrom (clientFileName, accountFileName, &custs);
 
-	display(&custs);
-
   printf ("Launching banking server on port %d\n", port);
   
+	display(&custs);
   fflush (stdout);
-
+  
   if (!pthread_create (&tcpThread, NULL, launchTCPServer, (void *) &port),
       (void *) &custs)
     pthread_join (tcpThread, NULL);
@@ -300,10 +298,7 @@ main (int argc, char const *argv[])
   if (!pthread_create (&udpThread, NULL, launchUDPServer, (void *) &port),
       (void *) &custs)
     pthread_join (udpThread, NULL);
-
-
-    display(&custs);
-
+   
 
   liberateCustomerArray (custs.c, custs.nbCustomers);
   return 0;

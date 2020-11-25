@@ -12,12 +12,18 @@
 #include <signal.h>
 #include <pthread.h>
 
+
 #include "server.h"
 #include "../bankingprotocol.h"
 
 #include "../businessLogic/customers.h"
 #include "../businessLogic/accounts.h"
 #define PORT 8080
+typedef struct {
+  int socket;
+  int sz;
+  struct sockaddr_in  * cli_addr;
+} udpArgs;
 
 //Mutex pour gestion des ressources
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -51,7 +57,6 @@ int * amount){
 
   for(int i = 0 ; i < sizeof(int) ; i ++)
       *amount |= (((unsigned char) (tmp[0][i]) )<< i*8);
-
 }
 
 // Traitement des commandes
@@ -85,7 +90,7 @@ char* treatCommand(char* trame){
  
   if(lAccountId >= 0){
 
-  fprintf (stdout,"\nCommande %s par %s sur %s" ,cmds[*trame],id,accountId); 
+  fprintf (stdout,"Commande %s par %s sur %s" ,cmds[*trame],id,accountId); 
 
     *toSend = (char)OK;
      
@@ -99,7 +104,7 @@ char* treatCommand(char* trame){
 
        case WITHDRAWAL:
         if(amount <= 0 ){
-          fprintf(stderr,"Le chiffre doit être positif");
+          fprintf(stderr,"Le chiffre doit être positif\n");
            *toSend |= (char)KO;
            break;
         }
@@ -119,7 +124,7 @@ char* treatCommand(char* trame){
      case ADD:      
 
          if(amount<= 0 ){
-          fprintf(stderr,"Le chiffre doit être positif");
+          fprintf(stderr,"Le chiffre doit être positif\n");
           *toSend |= (char)KO;
           break;
         }
@@ -140,7 +145,7 @@ char* treatCommand(char* trame){
           pthread_mutex_unlock(&mutex);
   }  
   }
-//    printf(cmds[*toSend]);
+
   return toSend;
 }
 
@@ -183,6 +188,7 @@ treatTCPConnection (void *socket)
 
     if(*bufferTx & KO){
       fprintf(stderr,"\nErreur dans la création de la trame");
+          pthread_mutex_lock (&mutex);  
       send (*(int *) socket, bufferTx, BUFFER_SIZE, MSG_NOSIGNAL);
       bzero(bufferTx,BUFFER_SIZE);
       pthread_mutex_unlock (&mutex);  
@@ -210,67 +216,174 @@ treatTCPConnection (void *socket)
 void
 SIGINTHandler (int dummy)
 {
-	printf("\nArrêt du serveur TCP\n");
+	printf("\nArrêt des serveurs\n");
 	fflush(stdout);
   liberateCustomerArray(custs.c,custs.nbCustomers);
   exit(EXIT_FAILURE);
 }
+void * treatUDPConnection(void* udpA){
 
-//Fonction pour thread TCP
-void *
-launchUDPServer (void *server)
-{
-  pthread_t thread_id[BUFFER_SIZE];
-  struct sockaddr_in servaddr, cliaddr;
-  printf ("Launching UDP banking server on port %d\n", *(int*)server);
+      char *tmp,bufferTx[BUFFER_SIZE],bufferRx[BUFFER_SIZE]; 
 
-  // Creation du socket UDP IPv4
-   if ( ( *(int*)server = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
-        fprintf(stderr,"socket non créé"); 
-        exit(EXIT_FAILURE); 
-    } 
-    // Mise à zéro des adresses
-    memset(&servaddr, 0, sizeof(servaddr)); 
-    memset(&cliaddr, 0, sizeof(cliaddr)); 
+      int len;
+       pthread_mutex_lock(&mutex);
+    // Envoi du message de bienvenue
+    sendto( (*(udpArgs*)udpA).socket , (const char *)WELCOME_CLIENT_MESSAGE, strlen(WELCOME_CLIENT_MESSAGE),  
+             MSG_CONFIRM, (const struct sockaddr *) ((udpArgs*)udpA)->cli_addr, 
+            ((udpArgs*)udpA)->sz); 
+        pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&mutex);
 
-    // Remplissage des informations pour le serveur
-    servaddr.sin_family    = AF_INET; // IPv4 
-    servaddr.sin_addr.s_addr = INADDR_ANY; 
-    servaddr.sin_port = *(int*)server; 
-    
-    // Liaison entre le socket et le port
-    if (bind(*(int*)server , (const struct sockaddr *)&servaddr,  
-            sizeof(servaddr)) < 0 ) 
-    { 
-        fprintf(stderr,"socket non lié"); 
-        exit(EXIT_FAILURE); 
-    } 
+    // Récupération des informations par le serveur
+    recvfrom((*(udpArgs*)udpA).socket , (char *)bufferRx, BUFFER_SIZE,  
+                MSG_WAITALL, ( struct sockaddr *)((udpArgs*)udpA)->cli_addr, 
+                &len); 
+    pthread_mutex_unlock(&mutex);
 
-  while(1){
-    
+ if(*bufferRx&KO){
+    fprintf(stderr,"\nTrame non conforme reçue");
   }
+  else{
+    //On remet à 0
+    bzero(bufferTx,  BUFFER_SIZE);
 
+    tmp = treatCommand(bufferRx);
+
+    if(*tmp == (RES_OPERATION |OK) ){
+      memmove(bufferTx,tmp,NB_OPERATIONS*(RET_RES_OP_SZ) );
+      bufferTx[0] = RES_OPERATION | OK;
+    }
+   
+    else{
+         if(*tmp & (RES_BAL )  ){
+            memmove(bufferTx,tmp,BALANCE_SZ );
+            bufferTx[0] |= RES_BAL | OK;
+         }else
+            strcpy(bufferTx,tmp);
+    }
+    if(*bufferTx & KO){
+      fprintf(stderr,"\nErreur dans la création de la trame");
+      pthread_mutex_lock (&mutex);
+      sendto( (*(udpArgs*)udpA).socket , bufferTx, BUFFER_SIZE,  
+             MSG_CONFIRM, (const struct sockaddr *) ((udpArgs*)udpA)->cli_addr, 
+            ((udpArgs*)udpA)->sz); 
+      pthread_mutex_unlock (&mutex);
+      bzero(bufferTx,BUFFER_SIZE);
+      pthread_mutex_unlock (&mutex);  
+    }
+    else{
+      pthread_mutex_lock (&mutex);
+      updateAccountFile(&custs,accountFileName);
+      if(*tmp & RES_OPERATION)
+       sendto( (*(udpArgs*)udpA).socket , bufferTx, NB_OPERATIONS*RET_RES_OP_SZ+NB_OPERATIONS,  
+             MSG_CONFIRM, (const struct sockaddr *) ((udpArgs*)udpA)->cli_addr, 
+            ((udpArgs*)udpA)->sz); 
+      
+      else if(*tmp & RES_BAL)
+       sendto( (*(udpArgs*)udpA).socket , bufferTx, BALANCE_SZ,  
+             MSG_CONFIRM, (const struct sockaddr *) ((udpArgs*)udpA)->cli_addr, 
+            ((udpArgs*)udpA)->sz); 
+
+      else      
+      sendto( (*(udpArgs*)udpA).socket , bufferTx, BUFFER_SIZE,  
+             MSG_CONFIRM, (const struct sockaddr *) ((udpArgs*)udpA)->cli_addr, 
+            ((udpArgs*)udpA)->sz); 
+      pthread_mutex_unlock (&mutex);  
+
+      bzero(bufferTx,BUFFER_SIZE);
+    }
+
+    free(tmp);
+  }
+  printf("\n");
+
+  fflush(stdout);
 }
 //Fonction pour thread TCP
 void *
-launchTCPServer (void *server)
+launchUDPServer (void *mandatory)
 {
+    int sock,len, i=0,j=0; 
+    char buffer[BUFFER_SIZE]; 
+    char start = OK; 
+    struct sockaddr_in serv_addr, cli_addr; 
+    pthread_t thread_id[BUFFER_SIZE];
+    udpArgs udpA;
+    // Création du socket UDP IPV4
+    if ( (sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
+        fprintf (stderr, "Impossible d'ouvrir le socket");
+        exit( EXIT_FAILURE);
+    } 
+    
+    // Remise à zéro
+    memset(&serv_addr, 0, sizeof(serv_addr)); 
+    memset(&cli_addr, 0, sizeof(cli_addr)); 
+      
+    // Filling server information 
+    serv_addr.sin_family    = AF_INET; // IPv4 
+    serv_addr.sin_addr.s_addr = INADDR_ANY; 
+    serv_addr.sin_port = htons(PORT); 
+      
+    // Lie le socket à l'adresse du serveur 
+    if ( bind(sock, (const struct sockaddr *)&serv_addr,  
+            sizeof(serv_addr)) < 0 ) 
+    { 
+        perror("socket non lié"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+    len = sizeof(cli_addr); 
+    udpA.socket = sock;
+
+    printf ("Launching UDP banking server on port %d\n", PORT);
+
+    while(1){
+      recvfrom(sock, (char *)buffer, BUFFER_SIZE,  
+                MSG_WAITALL, ( struct sockaddr *) &cli_addr, 
+                &len); 
+      
+      
+      udpA.sz = sizeof(cli_addr);
+      udpA.cli_addr = &cli_addr;
+
+        if (pthread_create
+          (&thread_id[i++], NULL, treatUDPConnection,
+          (void *) &udpA) < 0)
+          exit(EXIT_FAILURE);
+        
+        for (j = 0; j < i; j++)
+        {
+          pthread_join (thread_id[j], NULL);
+        }
+    
+    }
+    close(sock);
+      
+    return 0; 
+
+     }
+ 
+//Fonction pour thread TCP
+void *
+launchTCPServer (void *mandatory)
+{
+  int localSock = -1;
   pthread_t thread_id[BUFFER_SIZE];
   struct sockaddr_in address;
 
   int i = 0, j = 0, opt = 1, addrlen = sizeof (address), clientSock = 0;
 
-  printf ("Launching TCP banking server on port %d\n", *(int*)server);
+  printf ("Launching TCP banking server on port %d\n", PORT);
   
 
   // Creation du socket TCP IPv4
-  if ((*(int *) server = socket (AF_INET, SOCK_STREAM, 0)) == 0)
+  if ((localSock = socket (AF_INET, SOCK_STREAM, 0)) == 0)
     {
-      fprintf (stderr,"Probleme dans la creation du socket");
+      fprintf (stderr,"socket non créé");
       exit (EXIT_FAILURE);
     }
-// Indique que le socket peut être connecté plusieurs fois
-  if (setsockopt (*(int *) server, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
+  // Connexion avec toutes les interfaces
+  if (setsockopt (localSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
 		  &opt, sizeof (opt)))
     {
       fprintf (stderr,"setsockopt");
@@ -282,15 +395,15 @@ launchTCPServer (void *server)
   address.sin_port =  htons(PORT);
 
   // Lie le serveur à l'adresse PORT
-  if (bind (*(int *) server, (struct sockaddr *) &address, sizeof (address)) <
+  if (bind (localSock, (struct sockaddr *) &address, sizeof (address)) <
       0)
     {
-      fprintf (stderr,"bind failed");
+      fprintf (stderr,"socket non lié");
       exit (EXIT_FAILURE);
     }
 
   // On fixe le nombre maximum de connexion 
-  if (listen (*(int *) server, NB_MAX_CO) < 0)
+  if (listen (localSock, NB_MAX_CO) < 0)
     {
       fprintf (stderr,"listen");
       exit (EXIT_FAILURE);
@@ -299,7 +412,7 @@ launchTCPServer (void *server)
   while (1)
   {
   
-    if(clientSock = accept (*(int *) server, (struct sockaddr *) &address,
+    if(clientSock = accept (localSock, (struct sockaddr *) &address,
 			      (socklen_t *) & addrlen))
     {
       if (pthread_create
@@ -318,7 +431,7 @@ launchTCPServer (void *server)
 int
 main (int argc, char const *argv[])
 {
-  int *server, port = PORT;
+  int *server, port = PORT, err = 0;
 
   pthread_t udpThread,tcpThread;
 
@@ -330,15 +443,17 @@ main (int argc, char const *argv[])
 	display(&custs);
   fflush (stdout);
 
-  if (!pthread_create (&tcpThread, NULL, launchTCPServer, (void *) &port),
-      (void *) &custs)
-    pthread_join (tcpThread, NULL);
+   err = pthread_create (&tcpThread, NULL, launchTCPServer, (void *) NULL),
+       (void *) &custs;
+  if(err)
+    fprintf(stderr,"\nThread de server TCP non créé");
 
-  if (!pthread_create (&udpThread, NULL, launchUDPServer, (void *) &port),
+  if (!pthread_create (&udpThread, NULL, launchUDPServer, (void *) NULL),
       (void *) &custs)
-    pthread_join (udpThread, NULL);
-   
-
+   pthread_join (udpThread, NULL);
+  // On join le thread après ou sinon on est bloqué
+  pthread_join (tcpThread, NULL);
+  
   liberateCustomerArray (custs.c, custs.nbCustomers);
   return 0;
 }

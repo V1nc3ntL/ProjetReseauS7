@@ -14,6 +14,7 @@
 #include "client.h"
 #include <arpa/inet.h>
 
+#define LOCALHOST "127.0.0.1"
 #define CMD_BUFFER_SIZE 25
 // Retourne le code opération du header
 int
@@ -42,7 +43,7 @@ allocateTrame (int nbArg, char *args[], char trameHeader, ssize_t * trameSize)
   unsigned char tmpChar = 0;
   char *toSend = NULL;
   int tmp = 0;
-  float tmpF = 0;
+  double tmpF = 0;
   ssize_t szToAlloc = 1;
 
   for (i = 1; i < nbArg && i < 4; i++)
@@ -80,10 +81,9 @@ allocateTrame (int nbArg, char *args[], char trameHeader, ssize_t * trameSize)
 	  if (j != strlen (args[i]))
 	    {
 	      tmpF = strtof (args[i], NULL);
-
 	      // L'arrondi évite des problèmes de
 	      // virgule flottante
-	      tmp = (int) (round (tmpF * 100.00)) / 1.00;
+	      tmp = (int) (tmpF * 100.00) / 1.00;
 	    }
 
 	  else
@@ -212,75 +212,136 @@ displayReturnCommand (char *rxBuf, char* account)
 int
 main (int argc, char const *argv[])
 {
-  int sock = 0;
+  int sock = 0,tmp;
   struct sockaddr_in serv_addr;
   char rxBuf[BUFFER_SIZE] = { 0 };
-  char *cmd = NULL;
   ssize_t trameSize = 0;
   //Les commandes sont créées avec 4 arguments max
   char arg1[CMD_BUFFER_SIZE],
     arg2[CMD_BUFFER_SIZE],
-    arg3[CMD_BUFFER_SIZE], arg4[CMD_BUFFER_SIZE], arg5[CMD_BUFFER_SIZE];
+    arg3[CMD_BUFFER_SIZE], 
+    arg4[CMD_BUFFER_SIZE], 
+    arg5[CMD_BUFFER_SIZE];
   char *args[5] = { arg1, arg2, arg3, arg4, arg5 };
-  char trameHeader = 0, nbArg = 0;
-  char *toSend = NULL;
+  char trameHeader = 0, nbArg = 0,*toSend = NULL,*cmd = NULL;
 
+      // Le protocole définit le port
+      // Et on passe toujours par TCP/IP
+      serv_addr.sin_family = AF_INET;
+      serv_addr.sin_port = htons (PORT);
+      serv_addr.sin_addr.s_addr = INADDR_ANY; 
 
-  if ((sock = socket (AF_INET, SOCK_STREAM, 0)) < 0)
-    {
-      fprintf (stderr, "Impossible d'ouvrir le socket");
-      return -1;
-    }
+    // Par défaut on lance un client TCP sur localhost
+    if(argc == 1){
+ 
+      // Création du socket TCP IPV4
+      if ((sock = socket (AF_INET, SOCK_STREAM, 0)) < 0)
+      {
+        fprintf (stderr, "Impossible d'ouvrir le socket");
+        return EXIT_FAILURE;
+      }
 
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons (PORT);
-  //Connecte à local host, on doit récupérer
-  // L'IP dans une chaîne 
-  // Convert IPv4 and IPv6 addresses from text to binary form 
-  if (inet_pton (AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
-    {
-      fprintf (stderr, "\nInvalid address/ Address not supported \n");
-      return -1;
-    }
+      //Connecte à local host, on doit récupérer
+      // L'IP dans une chaîne 
+      // Convertit IPv4 du text à la forme binaire
+      if (inet_pton (AF_INET, LOCALHOST, &serv_addr.sin_addr) <= 0)
+        {
+          fprintf (stderr, "\nProblème lors de la conversion texte-binaire de l'IP");
+          return EXIT_FAILURE;
+        }
 
-
-  // Mode connecté
-  if (connect (sock, (struct sockaddr *) &serv_addr, sizeof (serv_addr)) < 0)
-    {
-      fprintf (stderr, "\nConnection Failed \n");
-      return EXIT_FAILURE;
-    }
-
-  // while (1)
-  //   {
-  recv (sock, rxBuf, BUFFER_SIZE, 0);
-  printf ("%s\n", rxBuf);
-  bzero (rxBuf, BUFFER_SIZE);
-  fgets (rxBuf, BUFFER_SIZE, stdin);
-  nbArg = sscanf (rxBuf, "%s %s %s %s %s", arg1, arg2, arg3, arg4, arg5);
-
-  trameHeader = getOperationCode (arg1);
-  if (nbArg < 2)
-    trameHeader |= KO;
-  if (trameHeader & KO)
-    {
-      fprintf (stderr, "\nCommande non reconnue\n");
-    }
-  else
-    {
-      trameHeader |= OK;
-
-      // Création à envoyer par le client
-      toSend = allocateTrame (nbArg, args, trameHeader, &trameSize);
-
-      send (sock, toSend, trameSize, 0);
-
-      bzero (rxBuf, BUFFER_SIZE);
-      free (toSend);
-      // Attente du retour du serveur
+      // Mode connecté
+      if (connect (sock, (struct sockaddr *) &serv_addr, sizeof (serv_addr)) < 0)
+        {
+          fprintf (stderr, "\nConnexion impossible");
+          return EXIT_FAILURE;
+        }
+      // Affichage du message d'accueil
       recv (sock, rxBuf, BUFFER_SIZE, 0);
-      displayReturnCommand (rxBuf, arg3);
-    }
+      printf ("%s\n", rxBuf);
+      bzero (rxBuf, BUFFER_SIZE);
+      fgets (rxBuf, BUFFER_SIZE, stdin);
+      nbArg = sscanf (rxBuf, "%s %s %s %s %s", arg1, arg2, arg3, arg4, arg5);
+      
+      printf("%s \n",arg1);
+      trameHeader = getOperationCode (arg1);
+      if (nbArg < 2)
+        trameHeader |= KO;
+      if (trameHeader & KO)
+        {
+          fprintf (stderr, "\nCommande non reconnue\n");
+        }
+      else
+        {
+          trameHeader |= OK;
+          toSend = allocateTrame (nbArg, args, trameHeader, &trameSize);
+          send (sock, toSend, trameSize, 0);
+          bzero (rxBuf, BUFFER_SIZE);
+          free (toSend);
+          // Attente du retour du serveur
+          recv (sock, rxBuf, BUFFER_SIZE, 0);
+          displayReturnCommand (rxBuf, arg3);
+        }
 
+    }else{
+      // Soit le deuxième argument est UDP, on lance un client UDP sur localhost
+       if(!strcmp(argv[1],"UDP")){
+          int sock; 
+	        char buffer[BUFFER_SIZE]; 
+	        char hello = OK; 
+	        struct sockaddr_in	 serv_addr; 
+
+          // Creating socket file descriptor 
+          if ( (sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
+            perror("socket creation failed"); 
+            exit(EXIT_FAILURE); 
+          } 
+
+          memset(&serv_addr, 0, sizeof(serv_addr)); 
+          
+          // Filling server information 
+          serv_addr.sin_family = AF_INET; 
+          serv_addr.sin_port = htons(PORT); 
+          serv_addr.sin_addr.s_addr = INADDR_ANY; 
+          
+          int len; 
+          // On envoie un octet pour lancer le protocole
+          sendto(sock, (const char *)&hello,1, 
+            MSG_CONFIRM, (const struct sockaddr *) &serv_addr, 
+              sizeof(serv_addr)); 
+          
+            
+          recvfrom(sock, (char *)buffer, BUFFER_SIZE, 
+                MSG_WAITALL, (struct sockaddr *) &serv_addr, 
+                &len); 
+                fgets (rxBuf, BUFFER_SIZE, stdin);
+              nbArg = sscanf (rxBuf, "%s %s %s %s %s", arg1, arg2, arg3, arg4, arg5);
+
+          trameHeader = getOperationCode (arg1);
+          if (nbArg < 2)
+                trameHeader |= KO;
+
+              if (trameHeader & KO)
+                {
+                  fprintf (stderr, "\nCommande non reconnue\n");
+                }
+              else
+                {
+                  trameHeader |= OK;
+                  toSend = allocateTrame (nbArg, args, trameHeader, &trameSize); 
+                  sendto(sock, (const char *)toSend,trameSize, 
+                  MSG_CONFIRM, (const struct sockaddr *) &serv_addr, 
+                  sizeof(serv_addr)); 
+                  bzero (rxBuf, BUFFER_SIZE);
+                  free (toSend);
+                  // Attente du retour du serveur
+                  recvfrom(sock,rxBuf,BUFFER_SIZE, MSG_WAITALL, (struct sockaddr *) &serv_addr, 
+                             &len); 
+                }
+          displayReturnCommand (rxBuf, arg3);
+  
+                }          
+            }
+  close(sock); 
   return 1;
 }

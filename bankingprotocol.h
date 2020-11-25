@@ -9,9 +9,10 @@
 
 #define HEADER_SIZE 1
 
+
 #define NB_CMD 5
-
-
+// Port pour le protocole
+#define PORT 8080
 //Premier octet de trame
 
 //Les 3 1ers bits donnent l'opération
@@ -26,8 +27,8 @@
 
 #define KO 1<<3
 #define OK 1<<4
-#define RES_SOLDE 1<<5
-
+#define RES_BAL 1<<5
+#define NEG 1<<6
 
 // Second octet de statut de la trame
 // Identifie le n° d'opération en cas

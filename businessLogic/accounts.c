@@ -17,14 +17,8 @@
 #include "customers.h"
 #include "accounts.h"
 
-#define PORT 8080
 //Mutex pour gestion des ressources
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-operation *
-retrieveOperations (char *opF)
-{
-
-}
 
 void
 liberateOperation (account * act)
@@ -38,7 +32,6 @@ liberateOperation (account * act)
   act->nbOps = 0;
 }
 
-//char* opToStr()
 int
 updateOperationFile (customerArray * custs, char *opF)
 {
@@ -80,12 +73,6 @@ updateOperationFile (customerArray * custs, char *opF)
   return ret;
 }
 
-//Créé une trame
-char *
-createOpeResultsTrame (char *headerOnly)
-{
-
-}
 
 int
 getLastOperations (char *operationFile, char *id, char *accountId,
@@ -158,16 +145,14 @@ getLastOperations (char *operationFile, char *id, char *accountId,
 
       //Récupération de l'heure
       amount = atoi (date);
+
       for(k ; k < (sizeof (int)<<1) +1; k++)
 	      buffer[k] = (unsigned char) (amount >>( (k-sizeof(int)-1) * 8) & 0xff);
 
-             
       buffer[k++] = SEPARATOR;
       
         // Récupération du montant
       amount = atoi (op);
-      printf(op);
-
       for (l=0; l < sizeof (int); l++)
 	      buffer[k+l] = (unsigned char) ((amount >> l * 8) & 0xff);
       
@@ -180,9 +165,7 @@ getLastOperations (char *operationFile, char *id, char *accountId,
       memmove((*headerOnly)+j*RET_RES_OP_SZ,buffer,RET_RES_OP_SZ);
       
       bzero (buffer, BUFFER_SIZE);
-      // Découper la date en int
-      // Envoyer l'int
-      // Le décoder
+
     }
 
   // On revient au dévut de la trame
@@ -193,6 +176,8 @@ getLastOperations (char *operationFile, char *id, char *accountId,
   **headerOnly |= RES_OPERATION;
 
   j = 0;
+  // On libère le buffer
+  free(buf);
   } 
 
   //Retourne le nombre d'opérations
@@ -332,4 +317,28 @@ removeFromAccount (customerArray * custs, int customerIndex, int accountIndex,
   custs->c[customerIndex].accounts[accountIndex].balance -= (int) amount;
 
   return EXIT_SUCCESS;
+}
+void getBalance(customerArray custs,int customerIndex, int accountIndex,char ** toSend){
+  int tmpF = custs.c[customerIndex].accounts[accountIndex].balance;
+  int k =0 ;
+  char * copy = NULL;
+  int tmpInt = 0  ,i;
+  
+  while(!copy)
+    copy = realloc(*toSend,BALANCE_SZ+2);
+
+  *toSend =copy;
+ 
+  
+  **toSend = RES_BAL | OK;
+
+  if(tmpF < 0)
+    **toSend |= NEG;
+
+  //Décalage du solde
+  for (k = 1; k < sizeof (int)+1; k++)
+     (*toSend)[k]= ((tmpF >> ((k-1) * 8)) & 0xff);
+  
+  (*toSend)[k] = '\n';
+
 }

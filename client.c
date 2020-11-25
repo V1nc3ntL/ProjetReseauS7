@@ -13,7 +13,7 @@
 #include "bankingprotocol.h"
 #include "client.h"
 #include <arpa/inet.h>
-#define PORT 8080
+
 #define CMD_BUFFER_SIZE 25
 // Retourne le code opération du header
 int
@@ -125,11 +125,7 @@ displayReturnCommand (char *rxBuf, char* account)
         
         rxBuf = rxBuf+1;
 
-        
-
-
-
-       for(j = NB_OPERATIONS*RET_RES_OP_SZ-RET_RES_OP_SZ ; j >= 0 ; j-= RET_RES_OP_SZ){
+        for(j = NB_OPERATIONS*RET_RES_OP_SZ-RET_RES_OP_SZ ; j >= 0 ; j-= RET_RES_OP_SZ){
                  i=0;
                  // On a plus d'opérations à afficher
 
@@ -161,11 +157,15 @@ displayReturnCommand (char *rxBuf, char* account)
                 tmpInt  +=(unsigned int) ((((unsigned char) rxBuf[j+tmp+i])) << ((i)*8));
 
             sprintf(buffer,"%d",tmpInt);
-            sscanf(buffer,"%02d%02d%02d",&hI,&miI,&sI);
-            printf("%02d:%02d:%02d :\n",hI,miI ,sI);
-
-
-  
+            
+            // Si la valeur récupérée est < 10000 il y a 5 chiffres
+            if(tmpInt >= 100000 )
+              sscanf(buffer,"%02d%02d%02d",&hI,&miI,&sI);
+            else
+              sscanf(buffer,"%01d%02d%02d",&hI,&miI,&sI);
+            
+            printf("%02d:%02d:%02d :\n",hI,miI ,sI); 
+            
             tmp += i+1;
             
             for(tmpInt = 0 ,i = 0; i < sizeof(int) ; i ++)
@@ -173,8 +173,6 @@ displayReturnCommand (char *rxBuf, char* account)
 
             tmp += i+1; 
       
-   
-
       switch(rxBuf[tmp+j]){
             case 'R':
               hI = 1;
@@ -193,8 +191,17 @@ displayReturnCommand (char *rxBuf, char* account)
    
       }
       else{
-        printf ("\nOK : La commande %s a été traitée par le serveur\n",
-	      cmds[OP_CODE (rxBuf)]);
+        if(*rxBuf & RES_BAL){
+
+      for(tmpInt = 0 ,i = 0; i < sizeof(int) ; i ++)
+          tmpInt  += (unsigned int) (((unsigned char) rxBuf[i+1])) << (i*8);  
+        
+        printf("\nSolde du compte \t%s\t : \t %.2f\n",account,tmpInt/100.00);
+        }else{
+            printf ("\nOK : La commande %s a été traitée par le serveur\n",
+	          cmds[OP_CODE (rxBuf)]);
+        }
+
       }
     }
     
@@ -263,9 +270,8 @@ main (int argc, char const *argv[])
     {
       trameHeader |= OK;
 
+      // Création à envoyer par le client
       toSend = allocateTrame (nbArg, args, trameHeader, &trameSize);
-      printf (cmds[*toSend & 0xf]);
-      printf ("\nTrame a envoyer :%s", toSend);
 
       send (sock, toSend, trameSize, 0);
 

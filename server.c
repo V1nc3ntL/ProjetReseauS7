@@ -14,6 +14,7 @@
 
 #include "server.h"
 #include "bankingprotocol.h"
+
 #include "./businessLogic/customers.h"
 #include "./businessLogic/accounts.h"
 #define PORT 8080
@@ -91,7 +92,8 @@ char* treatCommand(char* trame){
     switch(opCode){
      
       case BALANCE:
-        *toSend |= BALANCE;
+        getBalance(custs,localId,lAccountId,&toSend);     
+
         break;
       break;
 
@@ -101,7 +103,7 @@ char* treatCommand(char* trame){
            *toSend |= (char)KO;
            break;
         }
-
+        // Fermeture des ressources critiques
         pthread_mutex_lock(&mutex);
         custs.c[localId].accounts[lAccountId].balance -= amount;
         addOperation(&custs.c[localId].accounts[lAccountId],WITHDRAWAL,amount);
@@ -111,15 +113,9 @@ char* treatCommand(char* trame){
         break;
     case OPERATIONS:
     case RES_OPERATION:
-
       getLastOperations(operationFileName,id,accountId,&toSend);     
       *toSend |= RES_OPERATION  ;
-      
-       fflush(stdout);
       break;
-
- 
-
      case ADD:      
 
          if(amount<= 0 ){
@@ -138,7 +134,10 @@ char* treatCommand(char* trame){
       break; 
   
   }
+      pthread_mutex_lock(&mutex);
+    fflush(stdout);
     updateOperationFile(&custs,operationFileName);
+          pthread_mutex_unlock(&mutex);
   }  
   }
 //    printf(cmds[*toSend]);
@@ -169,11 +168,17 @@ treatTCPConnection (void *socket)
 
     tmp = treatCommand(bufferRx);
 
-    if(*tmp != (RES_OPERATION |OK) )
-      strcpy(bufferTx,tmp);
+    if(*tmp == (RES_OPERATION |OK) ){
+      memmove(bufferTx,tmp,NB_OPERATIONS*(RET_RES_OP_SZ) );
+      bufferTx[0] = RES_OPERATION | OK;
+    }
+   
     else{
-      memmove(bufferTx,tmp,NB_OPERATIONS*(RET_RES_OP_SZ+2) );
-      bufferTx[0] = RES_OPERATION | OK;   
+         if(*tmp & (RES_BAL )  ){
+            memmove(bufferTx,tmp,BALANCE_SZ );
+            bufferTx[0] |= RES_BAL | OK;
+         }else
+            strcpy(bufferTx,tmp);
     }
 
     if(*bufferTx & KO){
@@ -187,6 +192,8 @@ treatTCPConnection (void *socket)
       updateAccountFile(&custs,accountFileName);
       if(*tmp & RES_OPERATION)
        send (*(int *) socket, bufferTx,NB_OPERATIONS*RET_RES_OP_SZ+NB_OPERATIONS, MSG_NOSIGNAL);
+      else if(*tmp & RES_BAL)
+       send (*(int *) socket, bufferTx, BALANCE_SZ, MSG_NOSIGNAL);
       else
         send (*(int *) socket, bufferTx, BUFFER_SIZE, MSG_NOSIGNAL);
       
@@ -201,17 +208,49 @@ treatTCPConnection (void *socket)
 
 // Permet d'intercepter l'arrêt
 void
-TCPIntHandler (int dummy)
+SIGINTHandler (int dummy)
 {
 	printf("\nArrêt du serveur TCP\n");
 	fflush(stdout);
   liberateCustomerArray(custs.c,custs.nbCustomers);
   exit(EXIT_FAILURE);
 }
+
 //Fonction pour thread TCP
 void *
 launchUDPServer (void *server)
-{}
+{
+  pthread_t thread_id[BUFFER_SIZE];
+  struct sockaddr_in servaddr, cliaddr;
+  printf ("Launching UDP banking server on port %d\n", *(int*)server);
+
+  // Creation du socket UDP IPv4
+   if ( ( *(int*)server = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
+        fprintf(stderr,"socket non créé"); 
+        exit(EXIT_FAILURE); 
+    } 
+    // Mise à zéro des adresses
+    memset(&servaddr, 0, sizeof(servaddr)); 
+    memset(&cliaddr, 0, sizeof(cliaddr)); 
+
+    // Remplissage des informations pour le serveur
+    servaddr.sin_family    = AF_INET; // IPv4 
+    servaddr.sin_addr.s_addr = INADDR_ANY; 
+    servaddr.sin_port = *(int*)server; 
+    
+    // Liaison entre le socket et le port
+    if (bind(*(int*)server , (const struct sockaddr *)&servaddr,  
+            sizeof(servaddr)) < 0 ) 
+    { 
+        fprintf(stderr,"socket non lié"); 
+        exit(EXIT_FAILURE); 
+    } 
+
+  while(1){
+    
+  }
+
+}
 //Fonction pour thread TCP
 void *
 launchTCPServer (void *server)
@@ -221,39 +260,39 @@ launchTCPServer (void *server)
 
   int i = 0, j = 0, opt = 1, addrlen = sizeof (address), clientSock = 0;
 
-  //association du ctrl-c à la libération de mémoire
-  signal (SIGINT, TCPIntHandler);
+  printf ("Launching TCP banking server on port %d\n", *(int*)server);
+  
 
   // Creation du socket TCP IPv4
   if ((*(int *) server = socket (AF_INET, SOCK_STREAM, 0)) == 0)
     {
-      perror ("Probleme dans la creation du socket");
+      fprintf (stderr,"Probleme dans la creation du socket");
       exit (EXIT_FAILURE);
     }
 // Indique que le socket peut être connecté plusieurs fois
   if (setsockopt (*(int *) server, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
 		  &opt, sizeof (opt)))
     {
-      perror ("setsockopt");
+      fprintf (stderr,"setsockopt");
       exit (EXIT_FAILURE);
     }
 
   address.sin_family = AF_INET;
   address.sin_addr.s_addr = INADDR_ANY;
-  address.sin_port = htons (PORT);
+  address.sin_port =  htons(PORT);
 
   // Lie le serveur à l'adresse PORT
   if (bind (*(int *) server, (struct sockaddr *) &address, sizeof (address)) <
       0)
     {
-      perror ("bind failed");
+      fprintf (stderr,"bind failed");
       exit (EXIT_FAILURE);
     }
 
   // On fixe le nombre maximum de connexion 
   if (listen (*(int *) server, NB_MAX_CO) < 0)
     {
-      perror ("listen");
+      fprintf (stderr,"listen");
       exit (EXIT_FAILURE);
     }
   
@@ -283,14 +322,14 @@ main (int argc, char const *argv[])
 
   pthread_t udpThread,tcpThread;
 
+  //association du ctrl-c à la libération de mémoire
+  signal (SIGINT, SIGINTHandler);
 
   getClientsAndAccountFrom (clientFileName, accountFileName, &custs);
 
-  printf ("Launching banking server on port %d\n", port);
-  
 	display(&custs);
   fflush (stdout);
-  
+
   if (!pthread_create (&tcpThread, NULL, launchTCPServer, (void *) &port),
       (void *) &custs)
     pthread_join (tcpThread, NULL);

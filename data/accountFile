@@ -1,6 +1,8 @@
-john:CompteCourant:-715
-john:CompteEpargne:4185
-dolly:LivretA:112
-dolly:CompteEpargne:612
-bob:LivretA:25
+john:CompteCourant:-4715
+john:CompteEpargne:-25815
+dolly:LivretA:56126
+dolly:CompteEpargne:60612
+bob:PEL:89677
 bob:CompteEpargne:501
+paul:PEL:22180
+paul:PEA:300

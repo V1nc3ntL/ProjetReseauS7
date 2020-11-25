@@ -1,9 +1,9 @@
 #!/bin/sh 
 make;
 testDirectory="./testCmds/";
-./server &
+#./server &
 #Récupération du pid du serveur
-pid=$!;
+#pid=$!;
 
 sleep 0.5;
 # Teste tout les fichiers tst du répertoire de test
@@ -12,4 +12,4 @@ for TEST in ${testDirectory}*.tst;do
 done
  
 sleep 0.5;
-pkill server
+#pkill server

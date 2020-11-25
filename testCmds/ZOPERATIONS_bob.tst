@@ -1,1 +1,0 @@
-OPERATIONS bob PEL polytech

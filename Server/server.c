@@ -13,10 +13,10 @@
 #include <pthread.h>
 
 #include "server.h"
-#include "bankingprotocol.h"
+#include "../bankingprotocol.h"
 
-#include "./businessLogic/customers.h"
-#include "./businessLogic/accounts.h"
+#include "../businessLogic/customers.h"
+#include "../businessLogic/accounts.h"
 #define PORT 8080
 
 //Mutex pour gestion des ressources

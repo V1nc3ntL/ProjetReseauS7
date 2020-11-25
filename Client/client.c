@@ -10,7 +10,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
-#include "bankingprotocol.h"
+#include "../bankingprotocol.h"
 #include "client.h"
 #include <arpa/inet.h>
 
